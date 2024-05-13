@@ -16,7 +16,7 @@
 		<PackageIcon>naudio-icon.png</PackageIcon>
 		<Authors>alextnull</Authors>
 		<Description>
-			WaveIn and WaveOut implementation via SDL2 backend
+			WaveIn and WaveOut cross-platform implementations via SDL2 backend
 			Native libraries distributed via separated package - NAudio.Sdl2.Library
 		</Description>
 	</PropertyGroup>
