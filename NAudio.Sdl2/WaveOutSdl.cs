@@ -105,7 +105,7 @@ namespace NAudio.Sdl2
         public static List<WaveOutSdlCapabilities> GetCapabilitiesList()
         {
             List<WaveOutSdlCapabilities> list = new List<WaveOutSdlCapabilities>();
-            var deviceCount = WaveInSdl.DeviceCount;
+            var deviceCount = WaveOutSdl.DeviceCount;
             for (int index = 0; index < deviceCount; index++)
             {
                 list.Add(GetCapabilities(index));
@@ -132,7 +132,8 @@ namespace NAudio.Sdl2
                 Frequency = deviceAudioSpec.freq,
                 Samples = deviceAudioSpec.samples,
                 Silence = deviceAudioSpec.silence,
-                Size = deviceAudioSpec.size
+                Size = deviceAudioSpec.size,
+                IsAudioCapabilitiesValid = true
             };
         }
 
@@ -160,7 +161,7 @@ namespace NAudio.Sdl2
             get => adjustLatencyPercent;
             set => adjustLatencyPercent = value >= 0 && value <= 1
                 ? value
-                : throw new Exception("The percent value must be between 0 and 1");
+                : throw new SdlException("The percent value must be between 0 and 1");
         }
 
         /// <summary>
@@ -218,13 +219,22 @@ namespace NAudio.Sdl2
 
         /// <summary>
         /// Gets a <see cref="Wave.WaveFormat"/> instance indicating what the format is actually using.
-        /// <para>This property accessible after <see cref="Init(IWaveProvider)"/> call</para>
         /// </summary>
+        /// <remarks>
+        /// <para>This property accessible after <see cref="Init(IWaveProvider)"/> call</para>
+        /// <para>If the <see cref="AudioConversion"/> is set to <see cref="AudioConversion.None"/> then this is the same as <see cref="OutputWaveFormat"/></para>
+        /// </remarks>
         public WaveFormat ActualOutputWaveFormat { get; private set; }
 
         /// <summary>
         /// Audio conversion features
         /// </summary>
+        /// <remarks>
+        /// These flags specify how SDL should behave when a device cannot offer a specific feature<br/>
+        /// If the application requests a feature that the hardware doesn't offer, SDL will always try to get the closest equivalent<br/>
+        /// For example, if you ask for float32 audio format, but the sound card only supports int16, SDL will set the hardware to int16
+        /// <para>If your application can only handle one specific data format, pass a <see cref="AudioConversion.None" /> for <see cref="AudioConversion"/> and let SDL transparently handle any differences</para>
+        /// </remarks>
         public AudioConversion AudioConversion { get; set; }
 
         /// <summary>
@@ -284,7 +294,8 @@ namespace NAudio.Sdl2
             {
                 playbackState = PlaybackState.Stopped;
                 SdlBindingWrapper.StopPlaybackDevice(deviceNumber);
-                SdlBindingWrapper.ClosePlaybackDevice(deviceNumber);
+                SdlBindingWrapper.ClearQueuedAudio(deviceNumber);
+                callbackEvent.Set(); // give the thread a kick, make sure we exit
             }
         }
 
@@ -314,10 +325,12 @@ namespace NAudio.Sdl2
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {
+            Stop();
             if (disposing)
             {
-                Stop();
+                DisposeBuffers();
             }
+            CloseWaveOutSdl();
         }
 
         /// <summary>
@@ -328,6 +341,28 @@ namespace NAudio.Sdl2
             SdlBindingWrapper.StartPlaybackDevice(deviceNumber);
             playbackState = PlaybackState.Playing;
             callbackEvent.Set();
+        }
+
+        /// <summary>
+        /// Closes WaveOutSdl device
+        /// </summary>
+        private void CloseWaveOutSdl()
+        {
+            if (callbackEvent != null)
+            {
+                callbackEvent.Close();
+                callbackEvent = null;
+            }
+            SdlBindingWrapper.ClosePlaybackDevice(deviceNumber);
+        }
+
+        /// <summary>
+        /// Disposes frame buffers
+        /// </summary>
+        private void DisposeBuffers()
+        {
+            frameBuffer = null;
+            frameVolumeBuffer = null;
         }
 
         /// <summary>
