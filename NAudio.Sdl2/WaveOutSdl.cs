@@ -41,57 +41,75 @@ namespace NAudio.Sdl2
             syncContext = SynchronizationContext.Current;
             volumeLock = new object();
             DeviceId = -1;
-            AudioConversion = AudioConversion.None;
             DesiredLatency = 300;
-            AdjustLatencyPercent = 0.1;
             Volume = 1.28f;
+            SdlBindingWrapper.Initialize();
         }
 
         /// <summary>
         /// Returns the number of WaveOutSdl devices available in the system
         /// </summary>
-        public static int DeviceCount => SdlBindingWrapper.GetPlaybackDevicesNumber();
+        public static int DeviceCount 
+        { 
+            get 
+            {
+                try
+                {
+                    SdlBindingWrapper.Initialize();
+                    var deviceCount = SdlBindingWrapper.GetPlaybackDevicesNumber();
+                    return deviceCount;
+                }
+                finally
+                {
+                    SdlBindingWrapper.Terminate();
+                }
+            } 
+        }
 
         /// <summary>
         /// Retrieves the capabilities of a WaveOutSdl device
         /// </summary>
         /// <param name="deviceId">Device to test</param>
         /// <returns>The WaveOutSdl device capabilities</returns>
-        /// <remarks>
-        /// This function only returns DeviceNumber and DeviceName on versions below SDL 2.0.16
-        /// <para>Use the <see cref="WaveOutSdlCapabilities.IsAudioCapabilitiesValid"/> property to check if all capabilities are available</para>
-        /// </remarks>
         public static WaveOutSdlCapabilities GetCapabilities(int deviceId)
         {
-            var deviceName = SdlBindingWrapper.GetPlaybackDeviceName(deviceId);
-            var runtimeSdlVersion = SdlBindingWrapper.GetRuntimeSdlVersion();
-            var currentVersion = new Version(runtimeSdlVersion.major, runtimeSdlVersion.minor, runtimeSdlVersion.patch);
-            var minimumRequiredVersion = new Version(2, 0, 16);
-            if (currentVersion >= minimumRequiredVersion)
+            try
             {
-                var deviceAudioSpec = SdlBindingWrapper.GetPlaybackDeviceAudioSpec(deviceId);
-                var deviceBitSize = SdlBindingWrapper.GetAudioFormatBitSize(deviceAudioSpec.format);
+                SdlBindingWrapper.Initialize();
+                var deviceName = SdlBindingWrapper.GetPlaybackDeviceName(deviceId);
+                var runtimeSdlVersion = SdlBindingWrapper.GetRuntimeSdlVersion();
+                var currentVersion = new Version(runtimeSdlVersion.major, runtimeSdlVersion.minor, runtimeSdlVersion.patch);
+                var minimumRequiredVersion = new Version(2, 0, 16);
+                if (currentVersion >= minimumRequiredVersion)
+                {
+                    var deviceAudioSpec = SdlBindingWrapper.GetPlaybackDeviceAudioSpec(deviceId);
+                    var deviceBitSize = SdlBindingWrapper.GetAudioFormatBitSize(deviceAudioSpec.format);
+                    return new WaveOutSdlCapabilities
+                    {
+                        DeviceNumber = deviceId,
+                        DeviceName = deviceName,
+                        Bits = deviceBitSize,
+                        Channels = deviceAudioSpec.channels,
+                        Format = deviceAudioSpec.format,
+                        Frequency = deviceAudioSpec.freq,
+                        Samples = deviceAudioSpec.samples,
+                        Silence = deviceAudioSpec.silence,
+                        Size = deviceAudioSpec.size,
+                        IsAudioCapabilitiesValid = true
+                    };
+                }
+
                 return new WaveOutSdlCapabilities
                 {
                     DeviceNumber = deviceId,
                     DeviceName = deviceName,
-                    Bits = deviceBitSize,
-                    Channels = deviceAudioSpec.channels,
-                    Format = deviceAudioSpec.format,
-                    Frequency = deviceAudioSpec.freq,
-                    Samples = deviceAudioSpec.samples,
-                    Silence = deviceAudioSpec.silence,
-                    Size = deviceAudioSpec.size,
-                    IsAudioCapabilitiesValid = true
+                    IsAudioCapabilitiesValid = false
                 };
             }
-
-            return new WaveOutSdlCapabilities
+            finally
             {
-                DeviceNumber = deviceId,
-                DeviceName = deviceName,
-                IsAudioCapabilitiesValid = false
-            };
+                SdlBindingWrapper.Terminate();
+            }
         }
 
         /// <summary>
@@ -104,13 +122,21 @@ namespace NAudio.Sdl2
         /// </remarks>
         public static List<WaveOutSdlCapabilities> GetCapabilitiesList()
         {
-            List<WaveOutSdlCapabilities> list = new List<WaveOutSdlCapabilities>();
-            var deviceCount = WaveOutSdl.DeviceCount;
-            for (int index = 0; index < deviceCount; index++)
+            try
             {
-                list.Add(GetCapabilities(index));
+                SdlBindingWrapper.Initialize();
+                List<WaveOutSdlCapabilities> list = new List<WaveOutSdlCapabilities>();
+                var deviceCount = WaveOutSdl.DeviceCount;
+                for (int index = 0; index < deviceCount; index++)
+                {
+                    list.Add(GetCapabilities(index));
+                }
+                return list;
             }
-            return list;
+            finally
+            {
+                SdlBindingWrapper.Terminate();
+            }
         }
 
         /// <summary>
@@ -120,21 +146,29 @@ namespace NAudio.Sdl2
         /// <returns>The WaveOutSdl default device capabilities</returns>
         public static WaveOutSdlCapabilities GetDefaultDeviceCapabilities()
         {
-            SdlBindingWrapper.GetPlaybackDeviceDefaultAudioInfo(out var deviceName, out var deviceAudioSpec);
-            var deviceBitSize = SdlBindingWrapper.GetAudioFormatBitSize(deviceAudioSpec.format);
-            return new WaveOutSdlCapabilities
+            try
             {
-                DeviceNumber = -1,
-                DeviceName = deviceName,
-                Bits = deviceBitSize,
-                Channels = deviceAudioSpec.channels,
-                Format = deviceAudioSpec.format,
-                Frequency = deviceAudioSpec.freq,
-                Samples = deviceAudioSpec.samples,
-                Silence = deviceAudioSpec.silence,
-                Size = deviceAudioSpec.size,
-                IsAudioCapabilitiesValid = true
-            };
+                SdlBindingWrapper.Initialize();
+                SdlBindingWrapper.GetPlaybackDeviceDefaultAudioInfo(out var deviceName, out var deviceAudioSpec);
+                var deviceBitSize = SdlBindingWrapper.GetAudioFormatBitSize(deviceAudioSpec.format);
+                return new WaveOutSdlCapabilities
+                {
+                    DeviceNumber = -1,
+                    DeviceName = deviceName,
+                    Bits = deviceBitSize,
+                    Channels = deviceAudioSpec.channels,
+                    Format = deviceAudioSpec.format,
+                    Frequency = deviceAudioSpec.freq,
+                    Samples = deviceAudioSpec.samples,
+                    Silence = deviceAudioSpec.silence,
+                    Size = deviceAudioSpec.size,
+                    IsAudioCapabilitiesValid = true
+                };
+            }
+            finally
+            {
+                SdlBindingWrapper.Terminate();
+            }
         }
 
         /// <summary>
@@ -150,19 +184,6 @@ namespace NAudio.Sdl2
         /// <para>Should be set before a call to <see cref="Init(IWaveProvider)"/></para>
         /// </summary>
         public int DesiredLatency { get; set; }
-
-        /// <summary>
-        /// Gets or sets the desired latency adjustment in percent
-        /// <para>Value must be between 0 and 1</para>
-        /// <para>This percent only affects the playback wait</para>
-        /// </summary>
-        public double AdjustLatencyPercent
-        {
-            get => adjustLatencyPercent;
-            set => adjustLatencyPercent = value >= 0 && value <= 1
-                ? value
-                : throw new SdlException("The percent value must be between 0 and 1");
-        }
 
         /// <summary>
         /// Volume for this device ranges from 0 to 1.28
@@ -193,49 +214,9 @@ namespace NAudio.Sdl2
         public PlaybackState PlaybackState => playbackState;
 
         /// <summary>
-        /// Gets playback state directly from sdl
-        /// </summary>
-        public PlaybackState SdlState
-        {
-            get
-            {
-                var status = SdlBindingWrapper.GetDeviceStatus(deviceNumber);
-                switch (status)
-                {
-                    case SDL_AudioStatus.SDL_AUDIO_PLAYING:
-                        return PlaybackState.Playing;
-                    case SDL_AudioStatus.SDL_AUDIO_PAUSED:
-                        return PlaybackState.Paused;
-                    default:
-                        return PlaybackState.Stopped;
-                }
-            }
-        }
-
-        /// <summary>
         /// Gets a <see cref="Wave.WaveFormat"/> instance indicating the format the hardware is using.
         /// </summary>
         public WaveFormat OutputWaveFormat => waveStream.WaveFormat;
-
-        /// <summary>
-        /// Gets a <see cref="Wave.WaveFormat"/> instance indicating what the format is actually using.
-        /// </summary>
-        /// <remarks>
-        /// <para>This property accessible after <see cref="Init(IWaveProvider)"/> call</para>
-        /// <para>If the <see cref="AudioConversion"/> is set to <see cref="AudioConversion.None"/> then this is the same as <see cref="OutputWaveFormat"/></para>
-        /// </remarks>
-        public WaveFormat ActualOutputWaveFormat { get; private set; }
-
-        /// <summary>
-        /// Audio conversion features
-        /// </summary>
-        /// <remarks>
-        /// These flags specify how SDL should behave when a device cannot offer a specific feature<br/>
-        /// If the application requests a feature that the hardware doesn't offer, SDL will always try to get the closest equivalent<br/>
-        /// For example, if you ask for float32 audio format, but the sound card only supports int16, SDL will set the hardware to int16
-        /// <para>If your application can only handle one specific data format, pass a <see cref="AudioConversion.None" /> for <see cref="AudioConversion"/> and let SDL transparently handle any differences</para>
-        /// </remarks>
-        public AudioConversion AudioConversion { get; set; }
 
         /// <summary>
         /// Initializes the WaveOut device
@@ -259,8 +240,7 @@ namespace NAudio.Sdl2
             desiredSpec.silence = 0;
             desiredSpec.samples = frameSize;
             var deviceName = SdlBindingWrapper.GetPlaybackDeviceName(DeviceId);
-            var openDeviceNumber = SdlBindingWrapper.OpenPlaybackDevice(deviceName, ref desiredSpec, out obtainedAudioSpec, AudioConversion);
-            ActualOutputWaveFormat = GetWaveFormat(obtainedAudioSpec);
+            var openDeviceNumber = SdlBindingWrapper.OpenPlaybackDevice(deviceName, ref desiredSpec, out obtainedAudioSpec);
             deviceNumber = openDeviceNumber;
         }
 
@@ -324,12 +304,28 @@ namespace NAudio.Sdl2
         /// </summary>
         protected virtual void Dispose(bool disposing)
         {
-            Stop();
-            if (disposing)
+            try
             {
-                DisposeBuffers();
+                Stop();
+                if (disposing)
+                {
+                    DisposeBuffers();
+                }
+                CloseWaveOutSdl();
             }
-            CloseWaveOutSdl();
+            catch
+            {
+            }
+            finally
+            {
+                try
+                {
+                    SdlBindingWrapper.Terminate();
+                }
+                catch
+                {
+                }
+            }
         }
 
         /// <summary>
@@ -362,24 +358,6 @@ namespace NAudio.Sdl2
         {
             frameBuffer = null;
             frameVolumeBuffer = null;
-        }
-
-        /// <summary>
-        /// Return WaveFormat guessed by <see cref="SDL_AudioSpec"/>
-        /// </summary>
-        /// <param name="spec">Audio spec</param>
-        /// <returns>Wave format</returns>
-        private WaveFormat GetWaveFormat(SDL_AudioSpec spec)
-        {
-            var bitSize = SdlBindingWrapper.GetAudioFormatBitSize(spec.format);
-            if (spec.format == AUDIO_F32
-                || spec.format == AUDIO_F32LSB
-                || spec.format == AUDIO_F32MSB
-                || spec.format == AUDIO_F32SYS)
-            {
-                return WaveFormat.CreateIeeeFloatWaveFormat(spec.freq, spec.channels);
-            }
-            return new WaveFormat(spec.freq, bitSize, spec.channels);
         }
 
         /// <summary>
@@ -428,13 +406,18 @@ namespace NAudio.Sdl2
         /// </summary>
         private unsafe void DoPlayback()
         {
+            var minimumQueueSize = (uint)(waveStream.WaveFormat.AverageBytesPerSecond / 2.0);
             while (playbackState != PlaybackState.Stopped)
             {
-                // workaround to get rid of stuttering
-                // i assume on different hardware adjusting must be different
-                // is it possible that callbacks will help?
-                var adjustedLatency = DesiredLatency - (int)(DesiredLatency * AdjustLatencyPercent);
-                if (!callbackEvent.WaitOne(adjustedLatency))
+                var queueSize = SdlBindingWrapper.GetQueuedAudioSize(deviceNumber);
+                if (queueSize < minimumQueueSize)
+                {
+                    if (playbackState == PlaybackState.Playing)
+                    {
+                        Debug.WriteLine("WARNING: WaveOutSdl queueSize is smaller than minimumQueueSize");
+                    }
+                }
+                else if (!callbackEvent.WaitOne(DesiredLatency))
                 {
                     if (playbackState == PlaybackState.Playing)
                     {

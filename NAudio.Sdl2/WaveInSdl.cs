@@ -45,14 +45,29 @@ namespace NAudio.Sdl2
             peakLevelLock = new object();
             DeviceId = -1;
             WaveFormat = new WaveFormat(44100, 16, 1);
-            AudioConversion = AudioConversion.None;
             BufferMilliseconds = 100;
+            SdlBindingWrapper.Initialize();
         }
 
         /// <summary>
         /// Returns the number of WaveInSdl devices available in the system
         /// </summary>
-        public static int DeviceCount => SdlBindingWrapper.GetRecordingDevicesNumber();
+        public static int DeviceCount
+        {
+            get
+            {
+                try
+                {
+                    SdlBindingWrapper.Initialize();
+                    var deviceCount = SdlBindingWrapper.GetRecordingDevicesNumber();
+                    return deviceCount;
+                }
+                finally
+                {
+                    SdlBindingWrapper.Terminate();
+                }
+            }
+        }
 
         /// <summary>
         /// Retrieves the capabilities of a WaveInSdl device
@@ -65,35 +80,43 @@ namespace NAudio.Sdl2
         /// </remarks>
         public static WaveInSdlCapabilities GetCapabilities(int deviceId)
         {
-            var deviceName = SdlBindingWrapper.GetRecordingDeviceName(deviceId);
-            var runtimeSdlVersion = SdlBindingWrapper.GetRuntimeSdlVersion();
-            var currentVersion = new Version(runtimeSdlVersion.major, runtimeSdlVersion.minor, runtimeSdlVersion.patch);
-            var minimumRequiredVersion = new Version(2, 0, 16);
-            if (currentVersion >= minimumRequiredVersion)
+            try
             {
-                var deviceAudioSpec = SdlBindingWrapper.GetRecordingDeviceAudioSpec(deviceId);
-                var deviceBitSize = SdlBindingWrapper.GetAudioFormatBitSize(deviceAudioSpec.format);
+                SdlBindingWrapper.Initialize();
+                var deviceName = SdlBindingWrapper.GetRecordingDeviceName(deviceId);
+                var runtimeSdlVersion = SdlBindingWrapper.GetRuntimeSdlVersion();
+                var currentVersion = new Version(runtimeSdlVersion.major, runtimeSdlVersion.minor, runtimeSdlVersion.patch);
+                var minimumRequiredVersion = new Version(2, 0, 16);
+                if (currentVersion >= minimumRequiredVersion)
+                {
+                    var deviceAudioSpec = SdlBindingWrapper.GetRecordingDeviceAudioSpec(deviceId);
+                    var deviceBitSize = SdlBindingWrapper.GetAudioFormatBitSize(deviceAudioSpec.format);
+                    return new WaveInSdlCapabilities
+                    {
+                        DeviceNumber = deviceId,
+                        DeviceName = deviceName,
+                        Bits = deviceBitSize,
+                        Channels = deviceAudioSpec.channels,
+                        Format = deviceAudioSpec.format,
+                        Frequency = deviceAudioSpec.freq,
+                        Samples = deviceAudioSpec.samples,
+                        Silence = deviceAudioSpec.silence,
+                        Size = deviceAudioSpec.size,
+                        IsAudioCapabilitiesValid = true
+                    };
+                }
+
                 return new WaveInSdlCapabilities
                 {
                     DeviceNumber = deviceId,
                     DeviceName = deviceName,
-                    Bits = deviceBitSize,
-                    Channels = deviceAudioSpec.channels,
-                    Format = deviceAudioSpec.format,
-                    Frequency = deviceAudioSpec.freq,
-                    Samples = deviceAudioSpec.samples,
-                    Silence = deviceAudioSpec.silence,
-                    Size = deviceAudioSpec.size,
-                    IsAudioCapabilitiesValid = true
+                    IsAudioCapabilitiesValid = false
                 };
             }
-
-            return new WaveInSdlCapabilities
+            finally
             {
-                DeviceNumber = deviceId,
-                DeviceName = deviceName,
-                IsAudioCapabilitiesValid = false
-            };
+                SdlBindingWrapper.Terminate();
+            }
         }
 
         /// <summary>
@@ -106,13 +129,21 @@ namespace NAudio.Sdl2
         /// </remarks>
         public static List<WaveInSdlCapabilities> GetCapabilitiesList()
         {
-            List<WaveInSdlCapabilities> list = new List<WaveInSdlCapabilities>();
-            var deviceCount = WaveInSdl.DeviceCount;
-            for (int index = 0; index < deviceCount; index++)
+            try
             {
-                list.Add(GetCapabilities(index));
+                SdlBindingWrapper.Initialize();
+                List<WaveInSdlCapabilities> list = new List<WaveInSdlCapabilities>();
+                var deviceCount = WaveInSdl.DeviceCount;
+                for (int index = 0; index < deviceCount; index++)
+                {
+                    list.Add(GetCapabilities(index));
+                }
+                return list;
             }
-            return list;
+            finally
+            {
+                SdlBindingWrapper.Terminate();
+            }
         }
 
         /// <summary>
@@ -122,21 +153,29 @@ namespace NAudio.Sdl2
         /// <remarks>This function is available since SDL 2.24.0</remarks>
         public static WaveInSdlCapabilities GetDefaultDeviceCapabilities()
         {
-            SdlBindingWrapper.GetRecordingDeviceDefaultAudioInfo(out var deviceName, out var deviceAudioSpec);
-            var deviceBitSize = SdlBindingWrapper.GetAudioFormatBitSize(deviceAudioSpec.format);
-            return new WaveInSdlCapabilities
+            try
             {
-                DeviceNumber = -1,
-                DeviceName = deviceName,
-                Bits = deviceBitSize,
-                Channels = deviceAudioSpec.channels,
-                Format = deviceAudioSpec.format,
-                Frequency = deviceAudioSpec.freq,
-                Samples = deviceAudioSpec.samples,
-                Silence = deviceAudioSpec.silence,
-                Size = deviceAudioSpec.size,
-                IsAudioCapabilitiesValid = true
-            };
+                SdlBindingWrapper.Initialize();
+                SdlBindingWrapper.GetRecordingDeviceDefaultAudioInfo(out var deviceName, out var deviceAudioSpec);
+                var deviceBitSize = SdlBindingWrapper.GetAudioFormatBitSize(deviceAudioSpec.format);
+                return new WaveInSdlCapabilities
+                {
+                    DeviceNumber = -1,
+                    DeviceName = deviceName,
+                    Bits = deviceBitSize,
+                    Channels = deviceAudioSpec.channels,
+                    Format = deviceAudioSpec.format,
+                    Frequency = deviceAudioSpec.freq,
+                    Samples = deviceAudioSpec.samples,
+                    Silence = deviceAudioSpec.silence,
+                    Size = deviceAudioSpec.size,
+                    IsAudioCapabilitiesValid = true
+                };
+            }
+            finally
+            {
+                SdlBindingWrapper.Terminate();
+            }
         }
 
         /// <summary>
@@ -155,26 +194,6 @@ namespace NAudio.Sdl2
         /// WaveFormat we are expect recording in
         /// </summary>
         public WaveFormat WaveFormat { get; set; }
-
-        /// <summary>
-        /// WaveFormat we are actually recording in
-        /// </summary>
-        /// <remarks>
-        /// <para>This property accessible after <see cref="StartRecording"/> call</para>
-        /// <para>If the <see cref="AudioConversion"/> is set to <see cref="AudioConversion.None"/> then this is the same as <see cref="WaveFormat"/></para>
-        /// </remarks>
-        public WaveFormat ActualWaveFormat { get; private set; }
-
-        /// <summary>
-        /// Audio conversion features
-        /// </summary>
-        /// <remarks>
-        /// These flags specify how SDL should behave when a device cannot offer a specific feature<br/>
-        /// If the application requests a feature that the hardware doesn't offer, SDL will always try to get the closest equivalent<br/>
-        /// For example, if you ask for float32 audio format, but the sound card only supports int16, SDL will set the hardware to int16
-        /// <para>If your application can only handle one specific data format, pass a <see cref="AudioConversion.None" /> for <see cref="AudioConversion"/> and let SDL transparently handle any differences</para>
-        /// </remarks>
-        public AudioConversion AudioConversion { get; set; }
 
         /// <summary>
         /// WaveInSdl peak level
@@ -198,24 +217,9 @@ namespace NAudio.Sdl2
         }
 
         /// <summary>
-        /// Gets recorder state directly from sdl
+        /// Capture State
         /// </summary>
-        public PlaybackState SdlState
-        {
-            get
-            {
-                var status = SdlBindingWrapper.GetDeviceStatus(deviceNumber);
-                switch (status)
-                {
-                    case SDL_AudioStatus.SDL_AUDIO_PLAYING:
-                        return PlaybackState.Playing;
-                    case SDL_AudioStatus.SDL_AUDIO_PAUSED:
-                        return PlaybackState.Paused;
-                    default:
-                        return PlaybackState.Stopped;
-                }
-            }
-        }
+        public CaptureState CaptureState => captureState;
 
         /// <summary>
         /// Start recording
@@ -259,10 +263,23 @@ namespace NAudio.Sdl2
         {
             if (disposing)
             {
-                if (captureState != CaptureState.Stopped)
+                try
                 {
-                    StopRecording();
+                    if (captureState != CaptureState.Stopped)
+                    {
+                        StopRecording();
+                    }
                 }
+                catch
+                {
+                }
+            }
+            try
+            {
+                SdlBindingWrapper.Terminate();
+            }
+            catch
+            {
             }
         }
 
@@ -282,27 +299,8 @@ namespace NAudio.Sdl2
             desiredSpec.silence = 0;
             desiredSpec.samples = frameSize;
             var deviceName = SdlBindingWrapper.GetRecordingDeviceName(DeviceId);
-            var openDeviceNumber = SdlBindingWrapper.OpenRecordingDevice(deviceName, ref desiredSpec, out var obtainedSpec, AudioConversion);
-            ActualWaveFormat = GetWaveFormat(obtainedSpec);
+            var openDeviceNumber = SdlBindingWrapper.OpenRecordingDevice(deviceName, ref desiredSpec, out var obtainedSpec);
             return openDeviceNumber;
-        }
-
-        /// <summary>
-        /// Return WaveFormat guessed by <see cref="SDL_AudioSpec"/>
-        /// </summary>
-        /// <param name="spec">Audio spec</param>
-        /// <returns>Wave format</returns>
-        private WaveFormat GetWaveFormat(SDL_AudioSpec spec)
-        {
-            var bitSize = SdlBindingWrapper.GetAudioFormatBitSize(spec.format);
-            if (spec.format == AUDIO_F32
-                || spec.format == AUDIO_F32LSB
-                || spec.format == AUDIO_F32MSB
-                || spec.format == AUDIO_F32SYS)
-            {
-                return WaveFormat.CreateIeeeFloatWaveFormat(spec.freq, spec.channels);
-            }
-            return new WaveFormat(spec.freq, bitSize, spec.channels);
         }
 
         /// <summary>
@@ -391,7 +389,7 @@ namespace NAudio.Sdl2
             // Is this correct at least for 4 bytes aligned buffer bound?
             float max = 0;
             var waveBuffer = new WaveBuffer(buffer);
-            if (ActualWaveFormat.Encoding == WaveFormatEncoding.IeeeFloat)
+            if (WaveFormat.Encoding == WaveFormatEncoding.IeeeFloat)
             {
                 for (int i = 4; i < bytesRecorded / 4; i += 4)
                 {

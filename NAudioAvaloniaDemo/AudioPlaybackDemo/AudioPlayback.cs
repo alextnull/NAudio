@@ -1,9 +1,8 @@
 ﻿using System;
-using System.Windows;
-using Avalonia.Threading;
+using System.IO;
+using Avalonia.Platform.Storage;
 using NAudio.Extras;
 using NAudio.Sdl2;
-using NAudio.Sdl2.Structures;
 using NAudio.Wave;
 using NAudioAvaloniaDemo.Utils;
 
@@ -13,30 +12,35 @@ namespace NAudioAvaloniaDemo.AudioPlaybackDemo
     {
         private IWavePlayer playbackDevice;
         private WaveStream fileStream;
+        private Stream storageFileStream;
 
         public event EventHandler<FftEventArgs> FftCalculated;
 
         public event EventHandler<MaxSampleEventArgs> MaximumCalculated;
 
-        public void Load(string fileName)
+        public void Load(IStorageFile storageFile)
         {
             Stop();
             CloseFile();
             EnsureDeviceCreated();
-            OpenFile(fileName);
+            OpenFile(storageFile);
         }
 
         private void CloseFile()
         {
             fileStream?.Dispose();
             fileStream = null;
+            storageFileStream?.Dispose();
+            storageFileStream = null;
         }
 
-        private async void OpenFile(string fileName)
+        private async void OpenFile(IStorageFile storageFile)
         {
             try
             {
-                var inputStream = new AudioFileReader(fileName);
+                var fileName = storageFile.Name;
+                storageFileStream = await storageFile.OpenReadAsync();
+                var inputStream = new AudioFileStreamReader(fileName, storageFileStream);
                 fileStream = inputStream;
                 var aggregator = new SampleAggregator(inputStream);
                 aggregator.NotificationCount = inputStream.WaveFormat.SampleRate / 100;
@@ -47,7 +51,7 @@ namespace NAudioAvaloniaDemo.AudioPlaybackDemo
             }
             catch (Exception e)
             {
-                await MessageBox.ShowAsync(e.Message, "Problem opening file");
+                await MessageBox.ShowAsync(e.Message);
                 CloseFile();
             }
         }
@@ -64,8 +68,7 @@ namespace NAudioAvaloniaDemo.AudioPlaybackDemo
         {
             playbackDevice = new WaveOutSdl
             {
-                DesiredLatency = 200, 
-                AudioConversion = AudioConversion.None
+                DesiredLatency = 100
             };
         }
 
@@ -97,6 +100,8 @@ namespace NAudioAvaloniaDemo.AudioPlaybackDemo
             CloseFile();
             playbackDevice?.Dispose();
             playbackDevice = null;
+            storageFileStream?.Dispose();
+            storageFileStream = null;
         }
     }
 }
